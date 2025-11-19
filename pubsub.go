@@ -12,6 +12,7 @@ package pubsub
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 func NewPubSub(ctx context.Context) *Publisher {
@@ -57,9 +58,12 @@ type Publisher struct {
 
 func (p *Publisher) sendMsg(ctx context.Context, topic string, msg []byte) {
 	for _, subscriber := range p.channels[topic] {
+		// TODO: Voir comment gérer ca un peu plus robustement, circuit breaker / go routine ?
 		select {
 		case subscriber <- msg:
 			return
+		case <-time.After(time.Millisecond * 10):
+			continue
 		case <-ctx.Done():
 			return
 		}

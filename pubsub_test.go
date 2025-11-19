@@ -3,7 +3,7 @@ package pubsub_test
 import (
 	"context"
 	"fmt"
-	"ssr/pubsub"
+	"pubsub"
 	"testing"
 	"testing/synctest"
 	"time"
