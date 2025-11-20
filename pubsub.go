@@ -12,7 +12,6 @@ package pubsub
 import (
 	"context"
 	"sync"
-	"time"
 )
 
 func NewPubSub(ctx context.Context) *Publisher {
@@ -35,7 +34,7 @@ func NewPubSub(ctx context.Context) *Publisher {
 				p.balancer = nil
 				return
 			case curEvt := <-p.balancer:
-				p.sendMsg(ctx, curEvt.topic, curEvt.msg)
+				p.sendMsg(curEvt.topic, curEvt.msg)
 			}
 		}
 
@@ -56,15 +55,14 @@ type Publisher struct {
 	subscribeMutex *sync.Mutex
 }
 
-func (p *Publisher) sendMsg(ctx context.Context, topic string, msg []byte) {
+// sendMsg implements a non-blocking fan-out that we always try to send to the channel, but we are not
+// waiting for it to receive the message, if the channel is full, we just drop the message and never retry.
+func (p *Publisher) sendMsg(topic string, msg []byte) {
 	for _, subscriber := range p.channels[topic] {
-		// TODO: Voir comment gérer ca un peu plus robustement, circuit breaker / go routine ?
 		select {
 		case subscriber <- msg:
 			return
-		case <-time.After(time.Millisecond * 10):
-			continue
-		case <-ctx.Done():
+		default:
 			return
 		}
 	}

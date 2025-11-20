@@ -77,6 +77,7 @@ func TestSubscriber_Topics(t *testing.T) {
 	})
 }
 
+// This test is just checking that the pubsub is not blocked or slowed when there's a lot of subscribers with backpressure.
 func TestBlockedConsumer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		testCtx, cancel := context.WithCancel(t.Context())
@@ -99,21 +100,17 @@ func TestBlockedConsumer(t *testing.T) {
 			}
 		}
 
-		// Wait all the message has been sent to the slows consumers and are blocking.
+		// Wait all the message has been sent to the slow consumers and are blocking.
 		synctest.Wait()
 
 		publisher.Publish("clean-topic-that-will-be-consumed", []byte("Last message"))
 
-		timeout := time.After(time.Millisecond * 100)
-	loop:
-		for {
-			select {
-			case <-normalConsumerSubscriber:
-				break loop
-			case <-timeout:
-				t.Fatalf("timeout reached without receiving message, " +
-					"it seem that the bottleneck has been sent and the pubsub is in a deadlock")
-			}
+		timeout := time.After(time.Millisecond * 50)
+		select {
+		case <-normalConsumerSubscriber:
+		case <-timeout:
+			t.Fatalf("timeout reached without receiving message, " +
+				"it seems that the slow subscribers are blocking the fast one")
 		}
 
 		cancel()
