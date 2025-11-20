@@ -117,3 +117,18 @@ func TestBlockedConsumer(t *testing.T) {
 		synctest.Wait()
 	})
 }
+
+func TestHandleGlobalBackPressure(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		publisher := pubsub.NewPubSub(t.Context())
+		publisher.Subscribe("test")
+
+		go func() {
+			for i := 0; i < 10000; i++ {
+				publisher.Publish("test", []byte("Hello world"))
+			}
+		}()
+
+		synctest.Wait()
+	})
+}
