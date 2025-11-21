@@ -7,33 +7,12 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"go.uber.org/goleak"
 )
 
-func TestPublisher_Publish(t *testing.T) {
-	t.Parallel()
-
-	publisher := pubsub.NewPubSub(t.Context())
-
-	for i := 0; i < 100; i++ {
-		sub := publisher.Subscribe("test")
-
-		go func() {
-			for {
-				select {
-				case <-t.Context().Done():
-					return
-				case myMsg := <-sub:
-					fmt.Println("received msg : ", string(myMsg))
-				}
-			}
-		}()
-	}
-
-	for i := 0; i < 10000000; i++ {
-		go publisher.Publish("test", []byte("Hello world"))
-	}
-
-	time.Sleep(time.Second * 60 * 5)
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }
 
 func TestSubscriber_Topics(t *testing.T) {
@@ -130,5 +109,46 @@ func TestHandleGlobalBackPressure(t *testing.T) {
 		}()
 
 		synctest.Wait()
+	})
+}
+
+func TestPubSubGracefulShutdown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		publisher := pubsub.NewPubSub(ctx)
+		test1, test2, test3 := publisher.Subscribe("test1"), publisher.Subscribe("test2"),
+			publisher.Subscribe("test3")
+
+		go func() {
+			if msg, ok := <-test1; string(msg) != "test1" {
+				t.Errorf("received wrong message : %s, wanted : test1, %t", string(msg), ok)
+			}
+			if msg, ok := <-test2; string(msg) != "test2" {
+				t.Errorf("received wrong message : %s, wanted : test2, %t", string(msg), ok)
+			}
+			if msg, ok := <-test3; string(msg) != "test3" {
+				t.Errorf("received wrong message : %s, wanted : test3, %t", string(msg), ok)
+			}
+		}()
+
+		publisher.Publish("test1", []byte("test1"))
+		publisher.Publish("test2", []byte("test2"))
+		publisher.Publish("test3", []byte("test3"))
+
+		synctest.Wait()
+
+		cancel()
+
+		synctest.Wait()
+
+		if _, ok := <-test1; ok {
+			t.Error("test1 channel is not closed")
+		}
+		if _, ok := <-test2; ok {
+			t.Error("test2 channel is not closed")
+		}
+		if _, ok := <-test3; ok {
+			t.Error("test3 channel is not closed")
+		}
 	})
 }
